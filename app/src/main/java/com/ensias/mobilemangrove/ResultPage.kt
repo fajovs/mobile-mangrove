@@ -132,22 +132,42 @@ fun ResultPage(navController: NavController, result: String) {
                 shape = MaterialTheme.shapes.medium,
             ) {
                 Column(modifier = Modifier.padding(8.dp)) {
-                    Text(text = "Local Name", style = MaterialTheme.typography.bodyMedium.copy(fontSize = 16.sp, fontWeight = FontWeight.Bold))
-                    Text(text = result, style = MaterialTheme.typography.bodyMedium.copy(fontSize = 20.sp), modifier = Modifier.padding(bottom = 12.dp))
-                    Text(text = "Scientific Name", style = MaterialTheme.typography.bodyMedium.copy(fontSize = 16.sp, fontWeight = FontWeight.Bold))
-                    Text(text = plant?.scientificName ?: if (isLoading) "Loading..." else "Not Found", style = MaterialTheme.typography.bodyMedium.copy(fontSize = 20.sp), modifier = Modifier.padding(bottom = 12.dp))
-                    Text(text = "Location", style = MaterialTheme.typography.bodyMedium.copy(fontSize = 16.sp, fontWeight = FontWeight.Bold))
-                    Text(text = plant?.location ?: if (isLoading) "Loading..." else "Not Found", style = MaterialTheme.typography.bodyMedium.copy(fontSize = 20.sp), modifier = Modifier.padding(bottom = 12.dp))
-                    Text(text = "Description", style = MaterialTheme.typography.bodyMedium.copy(fontSize = 16.sp, fontWeight = FontWeight.Bold))
-                    Text(text = plant?.description ?: if (isLoading) "Loading..." else "Not Found", style = MaterialTheme.typography.bodyMedium.copy(fontSize = 18.sp), modifier = Modifier.padding(bottom = 12.dp))
-                }
+                    if(result == "Non-Mangrove"){
+                        Box(
+                            modifier = Modifier.fillMaxWidth(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "This is not a Mangrove Plant",
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.Red
+                                )
+                            )
+                        }
+                    }else{
+                        Text(text = "Local Name", style = MaterialTheme.typography.bodyMedium.copy(fontSize = 16.sp, fontWeight = FontWeight.Bold))
+                        Text(text = result, style = MaterialTheme.typography.bodyMedium.copy(fontSize = 20.sp), modifier = Modifier.padding(bottom = 12.dp))
+                        Text(text = "Scientific Name", style = MaterialTheme.typography.bodyMedium.copy(fontSize = 16.sp, fontWeight = FontWeight.Bold))
+                        Text(text = plant?.scientificName ?: if (isLoading) "Loading..." else "Not Found", style = MaterialTheme.typography.bodyMedium.copy(fontSize = 20.sp), modifier = Modifier.padding(bottom = 12.dp))
+                        Text(text = "Location", style = MaterialTheme.typography.bodyMedium.copy(fontSize = 16.sp, fontWeight = FontWeight.Bold))
+                        Text(text = plant?.location ?: if (isLoading) "Loading..." else "Not Found", style = MaterialTheme.typography.bodyMedium.copy(fontSize = 20.sp), modifier = Modifier.padding(bottom = 12.dp))
+                        Text(text = "Description", style = MaterialTheme.typography.bodyMedium.copy(fontSize = 16.sp, fontWeight = FontWeight.Bold))
+                        Text(text = plant?.description ?: if (isLoading) "Loading..." else "Not Found", style = MaterialTheme.typography.bodyMedium.copy(fontSize = 18.sp), modifier = Modifier.padding(bottom = 12.dp))
+
+                    }
+                 }
             }
         }
 
-        // Related Images Section as a separate item
-        item {
-            RelatedImagesSection(relatedImageNames)
+        if(result != "Non-Mangrove"){
+            // Related Images Section as a separate item
+            item {
+                RelatedImagesSection(relatedImageNames)
+            }
         }
+
     }
 }
 
