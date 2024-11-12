@@ -46,6 +46,11 @@ import java.util.*
 @Composable
 fun ScannerPage(navController: NavController) {
     val context = LocalContext.current
+    var permissionRequested by remember { mutableStateOf(false) }
+    var imageUri by remember { mutableStateOf<Uri?>(null) }
+    var imageBitmap by remember { mutableStateOf<Bitmap?>(null) }
+    var resultText by remember { mutableStateOf("Result will be shown here") }
+    var confidenceText by remember { mutableStateOf("Confidence will be shown here") }
 
     val requestPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) {
@@ -54,13 +59,6 @@ fun ScannerPage(navController: NavController) {
             // Handle permission denied
         }
     }
-
-    var permissionRequested by remember { mutableStateOf(false) }
-    var imageUri by remember { mutableStateOf<Uri?>(null) }
-    var imageBitmap by remember { mutableStateOf<Bitmap?>(null) }
-
-    var resultText by remember { mutableStateOf("Result will be shown here") }
-    var confidenceText by remember { mutableStateOf("Confidence will be shown here") }
 
     fun checkAndRequestPermission(permission: String, action: () -> Unit) {
         when {
@@ -83,17 +81,17 @@ fun ScannerPage(navController: NavController) {
             imageUri = uri
             val inputStream = context.contentResolver.openInputStream(uri)
             imageBitmap = BitmapFactory.decodeStream(inputStream)
+            inputStream?.close()
+
             imageBitmap?.let { bitmap ->
                 classifyImage(bitmap, context) { result, confidence ->
                     resultText = result
                     confidenceText = confidence
 
                     val path = context.getExternalFilesDir(null)!!.absolutePath
-                    val image = imageBitmap
-                    val tempFile = File(path , "tempFileName.jpg")
+                    val tempFile = File(path, "tempFileName.jpg")
                     val fOut = FileOutputStream(tempFile)
-                    image?.compress(Bitmap.CompressFormat.JPEG , 100 , fOut)
-
+                    bitmap.compress(Bitmap.CompressFormat.JPEG, 100, fOut)
                     fOut.close()
 
                     navController.navigate("ResultPage/${resultText}")
@@ -110,7 +108,6 @@ fun ScannerPage(navController: NavController) {
                 inputStream?.close()
 
                 bitmap?.let { rawBitmap ->
-                    // Ensure the bitmap is correctly oriented
                     val orientedBitmap = rotateImageIfRequired(context, rawBitmap, uri)
 
                     classifyImage(orientedBitmap, context) { result, confidence ->
@@ -132,15 +129,13 @@ fun ScannerPage(navController: NavController) {
 
     fun onGalleryClick() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            // For Android 14 and above, use READ_MEDIA_IMAGES
             checkAndRequestPermission(Manifest.permission.READ_MEDIA_IMAGES) {
                 galleryLauncher.launch("image/*")
             }
         } else {
-            // For Android 10-13, use READ_EXTERNAL_STORAGE
-            checkAndRequestPermission(Manifest.permission.READ_EXTERNAL_STORAGE) {
+
                 galleryLauncher.launch("image/*")
-            }
+
         }
     }
 
@@ -165,7 +160,7 @@ fun ScannerPage(navController: NavController) {
         ) {
             IconButton(
                 onClick = {
-                    navController.navigate("homePage") // Update route accordingly
+                    navController.navigate("homePage")
                 }
             ) {
                 Image(
@@ -243,8 +238,7 @@ fun CircularButton(
     Button(
         onClick = onClick,
         shape = CircleShape,
-        modifier = modifier
-            .size(80.dp),
+        modifier = modifier.size(80.dp),
     ) {
         Image(
             painter = painterResource(id = R.drawable.camera),
@@ -284,77 +278,53 @@ private fun rotateImage(image: Bitmap, degree: Float): Bitmap {
 
 fun classifyImage(image: Bitmap, context: Context, onResult: (String, String) -> Unit) {
     try {
-
         val checkModel = MangroveCheck.newInstance(context)
-
         val imageSize = 224
         val inputFeatureCheck = TensorBuffer.createFixedSize(intArrayOf(1, imageSize, imageSize, 3), DataType.FLOAT32)
         val byteBufferCheck = ByteBuffer.allocateDirect(4 * imageSize * imageSize * 3)
         byteBufferCheck.order(ByteOrder.nativeOrder())
-
         val intValuesCheck = IntArray(imageSize * imageSize)
         val scaledBitmapCheck = Bitmap.createScaledBitmap(image, imageSize, imageSize, false)
         scaledBitmapCheck.getPixels(intValuesCheck, 0, imageSize, 0, 0, imageSize, imageSize)
-
-        var pixelCheck = 0
-        for (i in 0 until imageSize) {
-            for (j in 0 until imageSize) {
-                val value = intValuesCheck[pixelCheck++]
-                byteBufferCheck.putFloat(((value shr 16) and 0xFF) * (1f / 255f))
-                byteBufferCheck.putFloat(((value shr 8) and 0xFF) * (1f / 255f))
-                byteBufferCheck.putFloat((value and 0xFF) * (1f / 255f))
-            }
+        intValuesCheck.forEach { value ->
+            byteBufferCheck.putFloat(((value shr 16) and 0xFF) * (1f / 255f))
+            byteBufferCheck.putFloat(((value shr 8) and 0xFF) * (1f / 255f))
+            byteBufferCheck.putFloat((value and 0xFF) * (1f / 255f))
         }
-
         inputFeatureCheck.loadBuffer(byteBufferCheck)
         val checkOutputs = checkModel.process(inputFeatureCheck)
         val checkOutputFeature = checkOutputs.outputFeature0AsTensorBuffer
         val checkConfidences = checkOutputFeature.floatArray
-        val isMangrove = checkConfidences[0] > checkConfidences[1] // Assuming 0 is Mangrove, 1 is Non-Mangrove
-
+        val isMangrove = checkConfidences[0] > checkConfidences[1]
         checkModel.close()
 
         if (isMangrove) {
-
             val classifyModel = MangroveModel.newInstance(context)
-
             val inputFeatureClassify = TensorBuffer.createFixedSize(intArrayOf(1, imageSize, imageSize, 3), DataType.FLOAT32)
             val byteBufferClassify = ByteBuffer.allocateDirect(4 * imageSize * imageSize * 3)
             byteBufferClassify.order(ByteOrder.nativeOrder())
-
             val intValuesClassify = IntArray(imageSize * imageSize)
             val scaledBitmapClassify = Bitmap.createScaledBitmap(image, imageSize, imageSize, false)
             scaledBitmapClassify.getPixels(intValuesClassify, 0, imageSize, 0, 0, imageSize, imageSize)
-
-            var pixelClassify = 0
-            for (i in 0 until imageSize) {
-                for (j in 0 until imageSize) {
-                    val value = intValuesClassify[pixelClassify++]
-                    byteBufferClassify.putFloat(((value shr 16) and 0xFF) * (1f / 255f))
-                    byteBufferClassify.putFloat(((value shr 8) and 0xFF) * (1f / 255f))
-                    byteBufferClassify.putFloat((value and 0xFF) * (1f / 255f))
-                }
+            intValuesClassify.forEach { value ->
+                byteBufferClassify.putFloat(((value shr 16) and 0xFF) * (1f / 255f))
+                byteBufferClassify.putFloat(((value shr 8) and 0xFF) * (1f / 255f))
+                byteBufferClassify.putFloat((value and 0xFF) * (1f / 255f))
             }
-
             inputFeatureClassify.loadBuffer(byteBufferClassify)
             val classifyOutputs = classifyModel.process(inputFeatureClassify)
             val classifyOutputFeature = classifyOutputs.outputFeature0AsTensorBuffer
-
             val classifyConfidences = classifyOutputFeature.floatArray
             val classes = arrayOf("Bakawan", "Miyapi", "Pagatpat", "Pototan")
             val maxPos = classifyConfidences.indices.maxByOrNull { classifyConfidences[it] } ?: -1
             val result = classes[maxPos]
             val confidence = classifyConfidences[maxPos]
-
             onResult(result, confidence.toString())
-
             classifyModel.close()
         } else {
-            // Step 3: If not a mangrove, return "Non-Mangrove" result
             onResult("Non-Mangrove", "This is not a mangrove plant")
         }
     } catch (e: Exception) {
         e.printStackTrace()
     }
 }
-
