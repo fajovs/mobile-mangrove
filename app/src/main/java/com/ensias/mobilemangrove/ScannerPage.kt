@@ -30,7 +30,6 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.navigation.NavController
-import com.ensias.mobilemangrove.ml.MangroveCheck
 import com.ensias.mobilemangrove.ml.MangroveModel
 import org.tensorflow.lite.DataType
 import org.tensorflow.lite.support.tensorbuffer.TensorBuffer
@@ -278,28 +277,9 @@ private fun rotateImage(image: Bitmap, degree: Float): Bitmap {
 
 fun classifyImage(image: Bitmap, context: Context, onResult: (String, String) -> Unit) {
     try {
-        val checkModel = MangroveCheck.newInstance(context)
-        val imageSize = 224
-        val inputFeatureCheck = TensorBuffer.createFixedSize(intArrayOf(1, imageSize, imageSize, 3), DataType.FLOAT32)
-        val byteBufferCheck = ByteBuffer.allocateDirect(4 * imageSize * imageSize * 3)
-        byteBufferCheck.order(ByteOrder.nativeOrder())
-        val intValuesCheck = IntArray(imageSize * imageSize)
-        val scaledBitmapCheck = Bitmap.createScaledBitmap(image, imageSize, imageSize, false)
-        scaledBitmapCheck.getPixels(intValuesCheck, 0, imageSize, 0, 0, imageSize, imageSize)
-        intValuesCheck.forEach { value ->
-            byteBufferCheck.putFloat(((value shr 16) and 0xFF) * (1f / 255f))
-            byteBufferCheck.putFloat(((value shr 8) and 0xFF) * (1f / 255f))
-            byteBufferCheck.putFloat((value and 0xFF) * (1f / 255f))
-        }
-        inputFeatureCheck.loadBuffer(byteBufferCheck)
-        val checkOutputs = checkModel.process(inputFeatureCheck)
-        val checkOutputFeature = checkOutputs.outputFeature0AsTensorBuffer
-        val checkConfidences = checkOutputFeature.floatArray
-        val isMangrove = checkConfidences[0] > checkConfidences[1]
-        checkModel.close()
 
-        if (isMangrove) {
             val classifyModel = MangroveModel.newInstance(context)
+            val imageSize = 224
             val inputFeatureClassify = TensorBuffer.createFixedSize(intArrayOf(1, imageSize, imageSize, 3), DataType.FLOAT32)
             val byteBufferClassify = ByteBuffer.allocateDirect(4 * imageSize * imageSize * 3)
             byteBufferClassify.order(ByteOrder.nativeOrder())
@@ -315,15 +295,13 @@ fun classifyImage(image: Bitmap, context: Context, onResult: (String, String) ->
             val classifyOutputs = classifyModel.process(inputFeatureClassify)
             val classifyOutputFeature = classifyOutputs.outputFeature0AsTensorBuffer
             val classifyConfidences = classifyOutputFeature.floatArray
-            val classes = arrayOf("Bakawan", "Miyapi", "Pagatpat", "Pototan")
+            val classes = arrayOf("Bakawan", "Pagatpat", "Pototan", "Non-Mangrove", "Miyapi")
             val maxPos = classifyConfidences.indices.maxByOrNull { classifyConfidences[it] } ?: -1
             val result = classes[maxPos]
             val confidence = classifyConfidences[maxPos]
             onResult(result, confidence.toString())
             classifyModel.close()
-        } else {
-            onResult("Non-Mangrove", "This is not a mangrove plant")
-        }
+
     } catch (e: Exception) {
         e.printStackTrace()
     }
