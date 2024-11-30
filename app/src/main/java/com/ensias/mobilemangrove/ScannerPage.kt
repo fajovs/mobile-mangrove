@@ -52,10 +52,8 @@ fun ScannerPage(navController: NavController) {
     var confidenceText by remember { mutableStateOf("Confidence will be shown here") }
 
     val requestPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) {
-            // Permission granted
-        } else {
-            // Handle permission denied
+        if (!granted) {
+            Log.e("Permission", "Permission denied")
         }
     }
 
@@ -132,9 +130,7 @@ fun ScannerPage(navController: NavController) {
                 galleryLauncher.launch("image/*")
             }
         } else {
-
-                galleryLauncher.launch("image/*")
-
+            galleryLauncher.launch("image/*")
         }
     }
 
@@ -277,32 +273,54 @@ private fun rotateImage(image: Bitmap, degree: Float): Bitmap {
 
 fun classifyImage(image: Bitmap, context: Context, onResult: (String, String) -> Unit) {
     try {
+        // Load the TFLite model
+        val classifyModel = MangroveModel.newInstance(context)
 
-            val classifyModel = MangroveModel.newInstance(context)
-            val imageSize = 224
-            val inputFeatureClassify = TensorBuffer.createFixedSize(intArrayOf(1, imageSize, imageSize, 3), DataType.FLOAT32)
-            val byteBufferClassify = ByteBuffer.allocateDirect(4 * imageSize * imageSize * 3)
-            byteBufferClassify.order(ByteOrder.nativeOrder())
-            val intValuesClassify = IntArray(imageSize * imageSize)
-            val scaledBitmapClassify = Bitmap.createScaledBitmap(image, imageSize, imageSize, false)
-            scaledBitmapClassify.getPixels(intValuesClassify, 0, imageSize, 0, 0, imageSize, imageSize)
-            intValuesClassify.forEach { value ->
-                byteBufferClassify.putFloat(((value shr 16) and 0xFF) * (1f / 255f))
-                byteBufferClassify.putFloat(((value shr 8) and 0xFF) * (1f / 255f))
-                byteBufferClassify.putFloat((value and 0xFF) * (1f / 255f))
-            }
-            inputFeatureClassify.loadBuffer(byteBufferClassify)
-            val classifyOutputs = classifyModel.process(inputFeatureClassify)
-            val classifyOutputFeature = classifyOutputs.outputFeature0AsTensorBuffer
-            val classifyConfidences = classifyOutputFeature.floatArray
-            val classes = arrayOf("Bakawan", "Pagatpat", "Pototan", "Non-Mangrove", "Miyapi")
-            val maxPos = classifyConfidences.indices.maxByOrNull { classifyConfidences[it] } ?: -1
-            val result = classes[maxPos]
-            val confidence = classifyConfidences[maxPos]
-            onResult(result, confidence.toString())
-            classifyModel.close()
+        // Define input image size and create input buffer
+        val imageSize = 28  // The model expects 28x28 images in grayscale
+        val inputFeatureClassify = TensorBuffer.createFixedSize(intArrayOf(1, imageSize, imageSize, 1), DataType.FLOAT32)
+        val byteBufferClassify = ByteBuffer.allocateDirect(4 * imageSize * imageSize).apply {
+            order(ByteOrder.nativeOrder())
+        }
+
+        // Preprocess the image
+        val scaledBitmap = Bitmap.createScaledBitmap(image, imageSize, imageSize, false)
+        val intValues = IntArray(imageSize * imageSize)
+        scaledBitmap.getPixels(intValues, 0, imageSize, 0, 0, imageSize, imageSize)
+
+        // Normalize pixel values and convert to grayscale (manual grayscale calculation)
+        intValues.forEach { pixel ->
+            val grayValue = ((pixel shr 16 and 0xFF) * 0.3f + (pixel shr 8 and 0xFF) * 0.59f + (pixel and 0xFF) * 0.11f).toInt()
+            byteBufferClassify.putFloat(grayValue / 255.0f)  // Normalize to [0, 1]
+        }
+
+        // Load the normalized image into the input buffer
+        inputFeatureClassify.loadBuffer(byteBufferClassify)
+
+        // Run inference
+        val outputs = classifyModel.process(inputFeatureClassify)
+        val outputBuffer = outputs.outputFeature0AsTensorBuffer
+
+        // Get model predictions
+        val confidenceScores = outputBuffer.floatArray
+        val classes = arrayOf("Bakawan", "Miyapi", "Non-Mangrove", "Pagatpat", "Pototan")
+        val maxIndex = confidenceScores.indices.maxByOrNull { confidenceScores[it] } ?: -1
+
+        if (maxIndex >= 0) {
+            val predictedClass = classes[maxIndex]
+            val confidence = confidenceScores[maxIndex]
+            onResult(predictedClass, "%.2f".format(confidence))
+        } else {
+            onResult("Error", "Unable to classify")
+        }
+
+        // Close the model
+        classifyModel.close()
 
     } catch (e: Exception) {
-        e.printStackTrace()
+        // Handle exceptions and log errors
+        Log.e("ClassifyImage", "Error during classification: ${e.message}", e)
+        onResult("Error", e.message ?: "Unknown error")
     }
 }
+
